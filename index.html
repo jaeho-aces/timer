@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>타이머</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>타이머</h1>
+        <div class="timer-input-section">
+            <div class="time-inputs-row">
+                <div class="time-input-group">
+                    <label for="timer-input">시간 (초):</label>
+                    <input 
+                        type="number" 
+                        id="timer-input" 
+                        step="0.1" 
+                        min="0.1" 
+                        placeholder="예: 10.5"
+                        value="10.0"
+                    >
+                </div>
+                <div class="time-input-group">
+                    <label for="warning-input">경고 시작 시간 (초):</label>
+                    <input 
+                        type="number" 
+                        id="warning-input" 
+                        step="0.1" 
+                        min="0" 
+                        placeholder="예: 3.0"
+                        value="3.0"
+                    >
+                </div>
+            </div>
+            <div class="color-picker-section">
+                <div class="color-picker-group">
+                    <label for="normal-color">기본 색상:</label>
+                    <input type="color" id="normal-color" value="#667eea">
+                </div>
+                <div class="color-picker-group">
+                    <label for="warning-color">경고 색상:</label>
+                    <input type="color" id="warning-color" value="#ff6b6b">
+                </div>
+            </div>
+        </div>
+        <div class="timer-display">
+            <span id="timer-display">0.0</span>
+        </div>
+        <div class="controls">
+            <button id="start-btn">시작</button>
+            <button id="stop-btn" disabled>정지</button>
+            <button id="reset-btn">리셋</button>
+            <button id="pip-btn">PIP 모드</button>
+        </div>
+        <video id="pip-video" style="display: none;" autoplay muted playsinline></video>
+        <canvas id="pip-canvas" style="display: none;"></canvas>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
