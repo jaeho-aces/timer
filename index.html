@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" class="bg-cd-back h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,57 +7,91 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>타이머</h1>
-        <div class="timer-input-section">
-            <div class="time-inputs-row">
-                <div class="time-input-group">
-                    <label for="timer-input">시간 (초):</label>
-                    <input 
-                        type="number" 
-                        id="timer-input" 
-                        step="0.1" 
-                        min="0.1" 
-                        placeholder="예: 10.5"
-                        value="10.0"
-                    >
+    <div id="pip-root" class="pip-root">
+        <!-- 메인 컨텐츠 영역 -->
+        <div class="main-content">
+            <!-- 설정 패널 -->
+            <div class="settings-panel">
+                <div class="time-inputs-row">
+                    <div class="time-input-group">
+                        <label for="timer-input">시간 (초):</label>
+                        <input 
+                            type="number" 
+                            id="timer-input" 
+                            step="0.1" 
+                            min="0.1" 
+                            placeholder="예: 10.5"
+                            value="10.0"
+                        >
+                    </div>
+                    <div class="time-input-group">
+                        <label for="warning-input">경고 시작 시간 (초):</label>
+                        <input 
+                            type="number" 
+                            id="warning-input" 
+                            step="0.1" 
+                            min="0" 
+                            placeholder="예: 3.0"
+                            value="3.0"
+                        >
+                    </div>
                 </div>
-                <div class="time-input-group">
-                    <label for="warning-input">경고 시작 시간 (초):</label>
-                    <input 
-                        type="number" 
-                        id="warning-input" 
-                        step="0.1" 
-                        min="0" 
-                        placeholder="예: 3.0"
-                        value="3.0"
-                    >
-                </div>
-            </div>
-            <div class="color-picker-section">
-                <div class="color-picker-group">
-                    <label for="normal-color">기본 색상:</label>
-                    <input type="color" id="normal-color" value="#667eea">
-                </div>
-                <div class="color-picker-group">
-                    <label for="warning-color">경고 색상:</label>
-                    <input type="color" id="warning-color" value="#ff6b6b">
+                <div class="action-buttons">
+                    <button id="reset-settings-btn" class="action-btn">설정 초기화</button>
+                    <button id="pip-btn" class="action-btn">PIP 모드</button>
                 </div>
             </div>
+            
+            <!-- 타이머 카드 그리드 -->
+            <div class="timer-grid">
+                <div class="timer-card">
+                    <div class="timer-display">
+                        <span id="timer-display" class="clock-font">0.0</span>
+                    </div>
+                    <div class="timer-card-controls">
+                        <button type="button" id="start-btn" class="timer-icon-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon-svg">
+                                <title>재생</title>
+                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                            </svg>
+                        </button>
+                        <button type="button" id="stop-btn" class="timer-icon-btn" disabled style="display: none;">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon-svg">
+                                <title>정지</title>
+                                <rect x="6" y="6" width="4" height="12" rx="1"></rect>
+                                <rect x="14" y="6" width="4" height="12" rx="1"></rect>
+                            </svg>
+                        </button>
+                        <button type="button" id="reset-btn" class="timer-icon-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-svg">
+                                <title>리셋</title>
+                                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                                <path d="M21 3v5h-5"></path>
+                                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                                <path d="M8 16H3v5"></path>
+                            </svg>
+                        </button>
+                        <div class="volume-control-wrapper">
+                            <button type="button" id="mute-btn" class="timer-icon-btn">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="icon-svg">
+                                    <title>음량</title>
+                                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                                </svg>
+                            </button>
+                            <div id="volume-slider-container" class="volume-slider-container" style="display: none;">
+                                <div class="volume-slider-wrapper">
+                                    <input type="range" id="volume-slider" min="0" max="100" value="30" class="volume-slider" orient="vertical">
+                                    <span id="volume-value" class="volume-value">30%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="timer-display">
-            <span id="timer-display">0.0</span>
-        </div>
-        <div class="controls">
-            <button id="start-btn">시작</button>
-            <button id="stop-btn" disabled>정지</button>
-            <button id="reset-btn">리셋</button>
-            <button id="reset-settings-btn">설정 초기화</button>
-            <button id="pip-btn">PIP 모드</button>
-        </div>
-        <video id="pip-video" style="display: none;" autoplay muted playsinline></video>
-        <canvas id="pip-canvas" style="display: none;"></canvas>
     </div>
+    
+    
     <script src="script.js"></script>
 </body>
 </html>

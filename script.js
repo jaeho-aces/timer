@@ -7,27 +7,29 @@ let isWarning = false;
 const timerInput = document.getElementById('timer-input');
 const warningInput = document.getElementById('warning-input');
 const timerDisplay = document.getElementById('timer-display');
-const timerDisplayContainer = timerDisplay.closest('.timer-display');
+const timerCard = timerDisplay.closest('.timer-card');
 const startBtn = document.getElementById('start-btn');
 const stopBtn = document.getElementById('stop-btn');
 const resetBtn = document.getElementById('reset-btn');
+const muteBtn = document.getElementById('mute-btn');
 const resetSettingsBtn = document.getElementById('reset-settings-btn');
 const pipBtn = document.getElementById('pip-btn');
-const pipVideo = document.getElementById('pip-video');
-const pipCanvas = document.getElementById('pip-canvas');
+const pipRoot = document.getElementById('pip-root');
 const body = document.body;
 
-// 색상 선택기 요소
-const normalColor = document.getElementById('normal-color');
-const warningColor = document.getElementById('warning-color');
+// 사이드바 요소 제거됨
 
-let pipStream = null;
-let pipContext = null;
-let pipAnimationFrame = null;
-let pipUpdateInterval = null;
+// 타이머 카드 버튼
+
+// 고정 색상 값
+const NORMAL_COLOR = '#2c2d32'; // 다크모드 색상
+const WARNING_COLOR = '#ff6b6b'; // 빨간색
+
+let pipWindow = null; // PIP 창
 let warningStartTime = null; // 경고 시작 시점 (CSS 애니메이션 동기화용)
 let audioContext = null; // 오디오 컨텍스트
 let lastBeepTime = 0; // 마지막 비프음 재생 시점
+let volumeLevel = 0.3; // 음량 레벨 (0~1, 기본값 0.3 = 30%)
 
 // 시간을 초 단위로만 표시
 function formatTime(seconds) {
@@ -36,6 +38,8 @@ function formatTime(seconds) {
 
 // 비프음 재생 함수
 function playBeep() {
+    if (volumeLevel <= 0) return; // 음량이 0이면 재생하지 않음
+    
     try {
         // AudioContext 초기화 (사용자 인터랙션 후에만 가능)
         if (!audioContext) {
@@ -52,8 +56,8 @@ function playBeep() {
         oscillator.frequency.value = 800; // 800Hz 주파수
         oscillator.type = 'sine'; // 사인파
         
-        // 볼륨 설정 (0.3 = 30%)
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        // 볼륨 설정 (volumeLevel 사용)
+        gainNode.gain.setValueAtTime(volumeLevel, audioContext.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
         
         // 0.1초 동안 재생
@@ -61,6 +65,85 @@ function playBeep() {
         oscillator.stop(audioContext.currentTime + 0.1);
     } catch (error) {
         console.log('비프음 재생 오류:', error);
+    }
+}
+
+// 음량 슬라이더 토글 함수
+function toggleVolumeSlider(isPipWindow = false) {
+    const targetWindow = isPipWindow ? pipWindow : window;
+    const targetDocument = isPipWindow ? pipWindow.document : document;
+    
+    if (!targetWindow || !targetDocument) return;
+    
+    const volumeSliderContainer = targetDocument.getElementById('volume-slider-container');
+    if (volumeSliderContainer) {
+        const isVisible = volumeSliderContainer.style.display !== 'none';
+        volumeSliderContainer.style.display = isVisible ? 'none' : 'block';
+        
+        // 슬라이더가 표시되면 외부 클릭 리스너 추가
+        if (!isVisible) {
+            // 다음 이벤트 루프에서 리스너 추가 (현재 클릭 이벤트가 전파되지 않도록)
+            setTimeout(() => {
+                const clickHandler = (event) => {
+                    handleOutsideClick(event, isPipWindow);
+                };
+                targetDocument.addEventListener('click', clickHandler, true);
+            }, 0);
+        } else {
+            // 모든 외부 클릭 리스너 제거는 handleOutsideClick에서 처리
+        }
+    }
+}
+
+// 외부 클릭 처리 함수
+function handleOutsideClick(event, isPipWindow = false) {
+    const targetDocument = isPipWindow ? pipWindow.document : document;
+    if (!targetDocument) return;
+    
+    const volumeSliderContainer = targetDocument.getElementById('volume-slider-container');
+    const volumeControlWrapper = targetDocument.querySelector('.volume-control-wrapper');
+    
+    if (volumeSliderContainer && volumeControlWrapper) {
+        // 클릭이 음량 컨트롤 영역 밖이면 슬라이더 숨기기
+        if (!volumeControlWrapper.contains(event.target)) {
+            volumeSliderContainer.style.display = 'none';
+            // 모든 외부 클릭 리스너 제거
+            targetDocument.removeEventListener('click', handleOutsideClick, true);
+        }
+    }
+}
+
+// 음량 업데이트 함수
+function updateVolume(value) {
+    volumeLevel = value / 100; // 0~100을 0~1로 변환
+    const volumeValue = document.getElementById('volume-value');
+    if (volumeValue) {
+        volumeValue.textContent = Math.round(value) + '%';
+    }
+    
+    // 로컬스토리지에 저장
+    localStorage.setItem('timer-volume', value.toString());
+    
+    // PIP 창이 열려있으면 동기화
+    if (pipWindow && !pipWindow.closed) {
+        const pipVolumeSlider = pipWindow.document.getElementById('volume-slider');
+        const pipVolumeValue = pipWindow.document.getElementById('volume-value');
+        if (pipVolumeSlider) {
+            pipVolumeSlider.value = value;
+        }
+        if (pipVolumeValue) {
+            pipVolumeValue.textContent = Math.round(value) + '%';
+        }
+    }
+    
+    // 메인 페이지도 동기화 (PIP에서 변경한 경우)
+    const mainVolumeSlider = document.getElementById('volume-slider');
+    const mainVolumeValue = document.getElementById('volume-value');
+    if (mainVolumeSlider && mainVolumeSlider !== event?.target) {
+        mainVolumeSlider.value = value;
+    }
+    if (mainVolumeValue) {
+        mainVolumeValue.textContent = Math.round(value) + '%';
     }
 }
 
@@ -78,8 +161,8 @@ function updateTimer() {
             currentTime = initialTime;
             isWarning = false;
             warningStartTime = null;
-            if (timerDisplayContainer) {
-                timerDisplayContainer.classList.remove('warning');
+            if (timerDisplay) {
+                timerDisplay.classList.remove('warning');
             }
         } else {
             stopTimer();
@@ -87,13 +170,13 @@ function updateTimer() {
     } else {
         timerDisplay.textContent = formatTime(currentTime);
         
-        // 지정한 시간 전에 경고 시작
+        // 지정한 시간 전에 경고 시작 (기본색상과 경고색상 깜빡임)
         if (currentTime <= warningThreshold && !isWarning) {
             isWarning = true;
-            warningStartTime = Date.now(); // 경고 시작 시점 기록 (CSS 애니메이션 동기화)
+            warningStartTime = Date.now(); // 경고 시작 시점 기록 (비프음 동기화용)
             lastBeepTime = 0; // 비프음 재생 시점 초기화
-            if (timerDisplayContainer) {
-                timerDisplayContainer.classList.add('warning');
+            if (timerDisplay) {
+                timerDisplay.classList.add('warning');
             }
             // 경고 시작 시 즉시 비프음 재생
             playBeep();
@@ -101,8 +184,8 @@ function updateTimer() {
             isWarning = false;
             warningStartTime = null;
             lastBeepTime = 0;
-            if (timerDisplayContainer) {
-                timerDisplayContainer.classList.remove('warning');
+            if (timerDisplay) {
+                timerDisplay.classList.remove('warning');
             }
         } else if (isWarning && warningStartTime !== null) {
             // 경고 중일 때 깜박임과 동기화하여 비프음 재생 (0.5초 주기)
@@ -141,7 +224,8 @@ function startTimer() {
     }
     
     isRunning = true;
-    startBtn.disabled = true;
+    startBtn.style.display = 'none';
+    stopBtn.style.display = 'flex';
     stopBtn.disabled = false;
     timerInput.disabled = true;
     warningInput.disabled = true;
@@ -152,8 +236,8 @@ function startTimer() {
 // 타이머 정지
 function stopTimer() {
     isRunning = false;
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
+    startBtn.style.display = 'flex';
+    stopBtn.style.display = 'none';
     timerInput.disabled = true;
     warningInput.disabled = true;
     
@@ -162,7 +246,7 @@ function stopTimer() {
         timerInterval = null;
     }
     
-    // 정지 시에도 현재 시간에 따라 경고 상태 업데이트 (페이지 기준)
+    // 정지 시에도 현재 시간에 따라 경고 상태 업데이트 (배경색 변경 없이)
     const warningThreshold = parseFloat(warningInput.value) || 0;
     if (currentTime > 0 && currentTime <= warningThreshold) {
         if (!isWarning) {
@@ -170,61 +254,113 @@ function stopTimer() {
             lastBeepTime = 0;
         }
         isWarning = true;
-        if (timerDisplayContainer) {
-            timerDisplayContainer.classList.add('warning');
+        if (timerDisplay) {
+            timerDisplay.classList.add('warning');
         }
     } else {
         isWarning = false;
         warningStartTime = null;
         lastBeepTime = 0;
-        if (timerDisplayContainer) {
-            timerDisplayContainer.classList.remove('warning');
+        if (timerDisplay) {
+            timerDisplay.classList.remove('warning');
         }
     }
 }
 
-// 타이머 리셋 (타이머만 초기화)
+// 타이머 리셋 (설정한 시간으로 초기화)
 function resetTimer() {
-    stopTimer();
-    currentTime = 0;
-    initialTime = 0;
-    timerDisplay.textContent = formatTime(0);
-    timerInput.disabled = false;
-    warningInput.disabled = false;
+    const wasRunning = isRunning; // 재생 중이었는지 저장
+    
+    // 재생 중이 아니면 정지
+    if (!wasRunning) {
+        stopTimer();
+    }
+    
+    // 입력된 시간으로 설정
+    const inputValue = parseFloat(timerInput.value);
+    if (!isNaN(inputValue) && inputValue > 0) {
+        currentTime = inputValue;
+        initialTime = inputValue;
+        timerDisplay.textContent = formatTime(currentTime);
+    } else {
+        // 입력값이 유효하지 않으면 0으로 설정
+        currentTime = 0;
+        initialTime = 0;
+        timerDisplay.textContent = formatTime(0);
+    }
+    
+    // 경고 상태 초기화
     isWarning = false;
     warningStartTime = null;
     lastBeepTime = 0;
-    if (timerDisplayContainer) {
-        timerDisplayContainer.classList.remove('warning');
+    if (timerDisplay) {
+        timerDisplay.classList.remove('warning');
+    }
+    
+    // 정지 상태일 때만 입력 필드 활성화
+    if (!wasRunning) {
+        timerInput.disabled = false;
+        warningInput.disabled = false;
+    }
+    
+    // 재생 중이었으면 다시 시작
+    if (wasRunning && currentTime > 0) {
+        // 타이머는 계속 실행 중이므로 별도 처리 불필요
+    } else if (wasRunning && currentTime <= 0) {
+        // 시간이 0이면 정지
+        stopTimer();
+        timerInput.disabled = false;
+        warningInput.disabled = false;
+    }
+    
+    // PIP 창이 열려있으면 타이머 디스플레이 업데이트
+    if (pipWindow && !pipWindow.closed) {
+        const pipTimerDisplayEl = pipWindow.document.getElementById('timer-display');
+        if (pipTimerDisplayEl) {
+            pipTimerDisplayEl.textContent = formatTime(currentTime);
+        }
+        const pipTimerDisplayContainer = pipWindow.document.querySelector('.timer-display');
+        if (pipTimerDisplayContainer) {
+            pipTimerDisplayContainer.classList.remove('warning');
+        }
     }
 }
 
-// 설정 초기화 (시간, 경고 시간, 색상 초기화)
+// 설정 초기화 (시간, 경고 시간 초기화)
 function resetSettings() {
     // 기본값으로 설정
     timerInput.value = '10.0';
     warningInput.value = '3.0';
-    normalColor.value = '#667eea';
-    warningColor.value = '#ff6b6b';
     
-    // 색상 업데이트
+    // 색상 업데이트 (고정 색상)
     updateColors();
     
     // 로컬스토리지에서 삭제
     localStorage.removeItem('timer-time');
     localStorage.removeItem('timer-warning-time');
-    localStorage.removeItem('timer-normal-color');
-    localStorage.removeItem('timer-warning-color');
     
     // 타이머도 초기화
     resetTimer();
 }
 
+// 사이드바 관련 코드 제거됨
+
 // 이벤트 리스너
 startBtn.addEventListener('click', startTimer);
 stopBtn.addEventListener('click', stopTimer);
 resetBtn.addEventListener('click', resetTimer);
+muteBtn.addEventListener('click', toggleVolumeSlider);
 resetSettingsBtn.addEventListener('click', resetSettings);
+
+// 음량 슬라이더 이벤트 리스너
+const volumeSlider = document.getElementById('volume-slider');
+if (volumeSlider) {
+    volumeSlider.addEventListener('input', (e) => {
+        updateVolume(parseFloat(e.target.value));
+    });
+}
+
+// +/-5 버튼 제거됨
 
 // Enter 키로 시작
 timerInput.addEventListener('keypress', (e) => {
@@ -233,12 +369,373 @@ timerInput.addEventListener('keypress', (e) => {
     }
 });
 
-// PIP 모드 시작
+// PIP 모드 시작 (documentPictureInPicture API 사용)
+async function startFloatingRemote() {
+    try {
+        // documentPictureInPicture API 지원 확인
+        if (!window.documentPictureInPicture) {
+            console.log('PIP 모드를 지원하지 않는 브라우저입니다. Chrome 123 이상이 필요합니다.');
+            return;
+        }
+        
+        // 1. PIP 창 열기
+        pipWindow = await window.documentPictureInPicture.requestWindow({
+            width: 400,
+            height: 600,
+        });
+        
+        // 2. 현재 페이지의 스타일(CSS)을 PIP 창으로 복사
+        [...document.styleSheets].forEach((styleSheet) => {
+            try {
+                const cssRules = [...styleSheet.cssRules].map((rule) => rule.cssText).join('');
+                const style = document.createElement('style');
+                style.textContent = cssRules;
+                pipWindow.document.head.appendChild(style);
+            } catch (e) {
+                // 외부 스타일시트인 경우
+                try {
+                    const link = document.createElement('link');
+                    link.rel = 'stylesheet';
+                    link.href = styleSheet.href;
+                    pipWindow.document.head.appendChild(link);
+                } catch (e2) {
+                    console.log('스타일 복사 실패:', e2);
+                }
+            }
+        });
+        
+        // 3. PIP 창에 넣을 HTML 구조 만들기 (설정 패널과 사이드바 제외)
+        const timerContainer = document.createElement('div');
+        timerContainer.className = 'pip-root';
+        
+        // 타이머 그리드만 복사
+        const timerGrid = pipRoot.querySelector('.timer-grid');
+        
+        // HTML 구조 재구성
+        let pipHTML = '';
+        
+        // 메인 컨텐츠 영역 (타이머 그리드만)
+        pipHTML += '<div class="main-content">';
+        if (timerGrid) {
+            pipHTML += timerGrid.outerHTML;
+        }
+        pipHTML += '</div>';
+        
+        timerContainer.innerHTML = pipHTML;
+        pipWindow.document.body.appendChild(timerContainer);
+        
+        // PIP 창의 body 스타일 설정
+        pipWindow.document.body.style.margin = '0';
+        pipWindow.document.body.style.padding = '0';
+        pipWindow.document.body.style.height = '100%';
+        pipWindow.document.body.style.overflow = 'hidden';
+        pipWindow.document.body.className = 'bg-cd-back h-full';
+        
+        // PIP 창의 main-content 스타일 조정 (사이드바가 없으므로 margin-left 제거)
+        const pipMainContent = pipWindow.document.querySelector('.main-content');
+        if (pipMainContent) {
+            pipMainContent.style.marginLeft = '0';
+            pipMainContent.style.width = '100%';
+            pipMainContent.style.padding = '16px';
+        }
+        
+        // 4. PIP 창 내부 버튼에 이벤트 연결
+        const pipStartBtn = pipWindow.document.querySelector('#start-btn');
+        const pipStopBtn = pipWindow.document.querySelector('#stop-btn');
+        const pipResetBtn = pipWindow.document.querySelector('#reset-btn');
+        const pipMuteBtn = pipWindow.document.querySelector('#mute-btn');
+        
+        if (pipStartBtn) {
+            pipStartBtn.addEventListener('click', () => {
+                startTimer();
+            });
+        }
+        
+        if (pipStopBtn) {
+            pipStopBtn.addEventListener('click', () => {
+                stopTimer();
+            });
+        }
+        
+        if (pipResetBtn) {
+            pipResetBtn.addEventListener('click', () => {
+                resetTimer();
+            });
+        }
+        
+        if (pipMuteBtn) {
+            pipMuteBtn.addEventListener('click', () => {
+                toggleVolumeSlider(true); // PIP 모드임을 표시
+            });
+        }
+        
+        // PIP 창 내부 음량 슬라이더 이벤트 연결
+        const pipVolumeSlider = pipWindow.document.getElementById('volume-slider');
+        if (pipVolumeSlider) {
+            pipVolumeSlider.addEventListener('input', (e) => {
+                updateVolume(parseFloat(e.target.value));
+            });
+        }
+        
+        // PIP 창 외부 클릭 리스너를 위한 함수
+        const pipHandleOutsideClick = (event) => {
+            handleOutsideClick(event, true);
+        };
+        
+        // PIP 창이 닫힐 때 리스너 정리
+        pipWindow.addEventListener('beforeunload', () => {
+            if (pipWindow && pipWindow.document) {
+                pipWindow.document.removeEventListener('click', pipHandleOutsideClick, true);
+            }
+        });
+        
+        // 5. 실시간 동기화 함수
+        function syncPIPWindow() {
+            if (!pipWindow || pipWindow.closed) return;
+            
+            try {
+                const pipTimerDisplay = pipWindow.document.getElementById('timer-display');
+                const pipTimerDisplayContainer = pipTimerDisplay?.closest('.timer-display');
+                const pipStartBtn = pipWindow.document.getElementById('start-btn');
+                const pipStopBtn = pipWindow.document.getElementById('stop-btn');
+                
+                // 타이머 표시 업데이트
+                if (pipTimerDisplay) {
+                    pipTimerDisplay.textContent = formatTime(Math.max(0, currentTime));
+                }
+                
+                // 경고 상태 업데이트 (기본색상과 경고색상 깜빡임)
+                if (pipTimerDisplayContainer) {
+                    if (isWarning) {
+                        pipTimerDisplayContainer.classList.add('warning');
+                    } else {
+                        pipTimerDisplayContainer.classList.remove('warning');
+                    }
+                }
+                
+                // 버튼 상태 업데이트
+                if (pipStartBtn && pipStopBtn) {
+                    if (isRunning) {
+                        pipStartBtn.style.display = 'none';
+                        pipStopBtn.style.display = 'flex';
+                        pipStopBtn.disabled = false;
+                    } else {
+                        pipStartBtn.style.display = 'flex';
+                        pipStopBtn.style.display = 'none';
+                    }
+                }
+                
+                // 음량 슬라이더 상태 업데이트
+                const pipVolumeSlider = pipWindow.document.getElementById('volume-slider');
+                const pipVolumeValue = pipWindow.document.getElementById('volume-value');
+                if (pipVolumeSlider) {
+                    pipVolumeSlider.value = Math.round(volumeLevel * 100);
+                }
+                if (pipVolumeValue) {
+                    pipVolumeValue.textContent = Math.round(volumeLevel * 100) + '%';
+                }
+                
+                // 메인 페이지 음량 슬라이더 상태도 동기화
+                const mainVolumeSlider = document.getElementById('volume-slider');
+                const mainVolumeValue = document.getElementById('volume-value');
+                if (mainVolumeSlider) {
+                    mainVolumeSlider.value = Math.round(volumeLevel * 100);
+                }
+                if (mainVolumeValue) {
+                    mainVolumeValue.textContent = Math.round(volumeLevel * 100) + '%';
+                }
+                
+                // 색상 업데이트 (고정 색상 사용)
+                if (pipTimerDisplayContainer) {
+                    const normalGradient = generateGradientColors(NORMAL_COLOR);
+                    const warningGradient = generateGradientColors(WARNING_COLOR);
+                    pipTimerDisplayContainer.style.setProperty('--normal-color-start', normalGradient.start);
+                    pipTimerDisplayContainer.style.setProperty('--normal-color-end', normalGradient.end);
+                    pipTimerDisplayContainer.style.setProperty('--warning-color-start', warningGradient.start);
+                    pipTimerDisplayContainer.style.setProperty('--warning-color-end', warningGradient.end);
+                }
+            } catch (e) {
+                console.error('동기화 오류:', e);
+            }
+        }
+        
+        // 주기적으로 동기화 (100ms마다)
+        const syncInterval = setInterval(() => {
+            if (!pipWindow || pipWindow.closed) {
+                clearInterval(syncInterval);
+                return;
+            }
+            syncPIPWindow();
+        }, 100);
+        
+        // PIP 창이 닫힐 때 처리
+        pipWindow.addEventListener('pagehide', () => {
+            clearInterval(syncInterval);
+            pipWindow = null;
+            pipBtn.textContent = 'PIP 모드';
+            pipBtn.classList.remove('pip-active');
+        });
+        
+        // 초기 동기화
+        syncPIPWindow();
+        
+        pipBtn.textContent = 'PIP 종료';
+        pipBtn.classList.add('pip-active');
+        
+    } catch (error) {
+        console.log('PIP 모드 오류:', error);
+        console.log('PIP 모드를 지원하지 않는 브라우저이거나 권한이 필요합니다.');
+    }
+}
+
+// PIP 모드 종료
+function stopFloatingRemote() {
+    if (pipWindow && !pipWindow.closed) {
+        pipWindow.close();
+    }
+    pipWindow = null;
+    
+    pipBtn.textContent = 'PIP 모드';
+    pipBtn.classList.remove('pip-active');
+}
+
+// 사용하지 않는 함수 제거됨 - 새 창 방식으로 변경
+/*
+function handlePIPFloatingClick(event) {
+    if (!document.pictureInPictureElement) return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const video = event.target;
+    if (!video || video !== pipVideo) return;
+    
+    // PIP 창의 비디오 요소에서 클릭 위치 가져오기
+    let x, y;
+    if (event.clientX !== undefined && event.clientY !== undefined) {
+        const rect = video.getBoundingClientRect();
+        x = event.clientX - rect.left;
+        y = event.clientY - rect.top;
+    } else if (event.offsetX !== undefined && event.offsetY !== undefined) {
+        x = event.offsetX;
+        y = event.offsetY;
+    } else {
+        return;
+    }
+    
+    // Canvas 크기에 맞춰 좌표 변환
+    const scaleX = pipCanvas.width / video.videoWidth || pipCanvas.width / video.clientWidth;
+    const scaleY = pipCanvas.height / video.videoHeight || pipCanvas.height / video.clientHeight;
+    const canvasX = x * scaleX;
+    const canvasY = y * scaleY;
+    
+    // 스케일 적용된 좌표로 변환
+    const scaledX = canvasX / pipScale;
+    const scaledY = canvasY / pipScale;
+    
+    // 사이드바 컨트롤 클릭 확인
+    if (sidebarOpen && scaledX >= 0 && scaledX <= 64) {
+        const buttonY = 40;
+        const buttonSize = 32;
+        const buttonSpacing = 8;
+        const centerX = 32;
+        
+        // 시작 버튼
+        if (Math.sqrt(Math.pow(scaledX - centerX, 2) + Math.pow(scaledY - buttonY, 2)) <= buttonSize / 2) {
+            if (!isRunning) {
+                startTimer();
+            }
+            return;
+        }
+        
+        // 정지 버튼
+        if (Math.sqrt(Math.pow(scaledX - centerX, 2) + Math.pow(scaledY - (buttonY + buttonSize + buttonSpacing), 2)) <= buttonSize / 2) {
+            if (isRunning) {
+                stopTimer();
+            }
+            return;
+        }
+        
+        // 리셋 버튼
+        if (Math.sqrt(Math.pow(scaledX - centerX, 2) + Math.pow(scaledY - (buttonY + (buttonSize + buttonSpacing) * 2), 2)) <= buttonSize / 2) {
+            resetTimer();
+            return;
+        }
+    }
+    
+    // 타이머 카드 버튼 클릭 확인
+    const mainContentX = sidebarOpen ? 64 : 24;
+    const cardX = mainContentX;
+    const cardY = 232; // settingsPanelY + settingsPanelHeight + 16
+    const cardWidth = 144;
+    const displayY = cardY + 50;
+    const displayHeight = 80;
+    const buttonY = displayY + displayHeight + 8;
+    const buttonHeight = 24;
+    const buttonWidth = 24;
+    const buttonSpacing = 4;
+    const cardCenterX = cardX + cardWidth / 2;
+    const totalWidth = buttonWidth * 5 + buttonSpacing * 4;
+    const startX = cardCenterX - totalWidth / 2;
+    
+    if (scaledX >= cardX && scaledX <= cardX + cardWidth && scaledY >= cardY && scaledY <= cardY + 200) {
+        // 버튼 영역 클릭 확인
+        if (scaledY >= buttonY && scaledY <= buttonY + buttonHeight) {
+            const buttonRadius = buttonWidth / 2;
+            
+            // -5 버튼
+            const minusX = startX + buttonWidth / 2;
+            const minusY = buttonY + buttonHeight / 2;
+            if (Math.sqrt(Math.pow(scaledX - minusX, 2) + Math.pow(scaledY - minusY, 2)) <= buttonRadius) {
+                if (!isRunning && currentTime > 0) {
+                    currentTime = Math.max(0, currentTime - 5);
+                    timerDisplay.textContent = formatTime(currentTime);
+                }
+                return;
+            }
+            
+            // 시작/정지 버튼
+            const playPauseX = startX + buttonWidth + buttonSpacing + buttonWidth / 2;
+            const playPauseY = buttonY + buttonHeight / 2;
+            if (Math.sqrt(Math.pow(scaledX - playPauseX, 2) + Math.pow(scaledY - playPauseY, 2)) <= 16) {
+                if (isRunning) {
+                    stopTimer();
+                } else {
+                    startTimer();
+                }
+                return;
+            }
+            
+            // 리셋 버튼
+            const resetX = startX + (buttonWidth + buttonSpacing) * 2 + buttonWidth / 2;
+            const resetY = buttonY + buttonHeight / 2;
+            if (Math.sqrt(Math.pow(scaledX - resetX, 2) + Math.pow(scaledY - resetY, 2)) <= 14) {
+                resetTimer();
+                return;
+            }
+            
+            // +5 버튼
+            const plusX = startX + (buttonWidth + buttonSpacing) * 3 + buttonWidth / 2;
+            const plusY = buttonY + buttonHeight / 2;
+            if (Math.sqrt(Math.pow(scaledX - plusX, 2) + Math.pow(scaledY - plusY, 2)) <= buttonRadius) {
+                if (!isRunning) {
+                    currentTime += 5;
+                    timerDisplay.textContent = formatTime(currentTime);
+                }
+                return;
+            }
+        }
+    }
+}
+*/
+
+// 사용하지 않는 함수 제거됨
+/*
 async function startPIP() {
     try {
-        // Canvas 설정 (PIP에 적합한 크기)
+        // Canvas 설정 (PIP에 적합한 크기, 버튼 영역 포함)
         pipCanvas.width = 400;
-        pipCanvas.height = 200;
+        pipCanvas.height = 250; // 버튼 영역을 위해 높이 증가
         
         if (!pipContext) {
             pipContext = pipCanvas.getContext('2d');
@@ -260,9 +757,9 @@ async function startPIP() {
             // Canvas를 완전히 지우고 다시 그리기 (비디오 스트림이 변경을 감지하도록)
             pipContext.clearRect(0, 0, pipCanvas.width, pipCanvas.height);
             
-            // 색상 가져오기 (자동 그라데이션 생성)
-            const normalGradient = generateGradientColors(normalColor.value);
-            const warningGradient = generateGradientColors(warningColor.value);
+            // 색상 가져오기 (고정 색상 사용)
+            const normalGradient = generateGradientColors(NORMAL_COLOR);
+            const warningGradient = generateGradientColors(WARNING_COLOR);
             const normalStart = normalGradient.start;
             const normalEnd = normalGradient.end;
             const warningStart = warningGradient.start;
@@ -313,7 +810,36 @@ async function startPIP() {
             
             // 타이머 텍스트 그리기 (currentTime을 직접 사용)
             const text = formatTime(Math.max(0, currentTime));
-            pipContext.fillText(text, pipCanvas.width / 2, pipCanvas.height / 2);
+            const textY = 100; // 타이머 텍스트 Y 위치
+            pipContext.fillText(text, pipCanvas.width / 2, textY);
+            
+            // 버튼 영역 그리기 (하단)
+            const buttonAreaY = 160;
+            const buttonHeight = 30;
+            const buttonWidth = 80;
+            const buttonSpacing = 10;
+            const totalButtonWidth = buttonWidth * 3 + buttonSpacing * 2;
+            const startX = (pipCanvas.width - totalButtonWidth) / 2;
+            
+            // 시작 버튼
+            pipContext.fillStyle = isRunning ? '#666' : '#333';
+            pipContext.fillRect(startX, buttonAreaY, buttonWidth, buttonHeight);
+            pipContext.fillStyle = 'white';
+            pipContext.font = 'bold 14px Arial';
+            pipContext.textAlign = 'center';
+            pipContext.fillText('시작', startX + buttonWidth / 2, buttonAreaY + 20);
+            
+            // 정지 버튼
+            pipContext.fillStyle = isRunning ? '#333' : '#666';
+            pipContext.fillRect(startX + buttonWidth + buttonSpacing, buttonAreaY, buttonWidth, buttonHeight);
+            pipContext.fillStyle = 'white';
+            pipContext.fillText('정지', startX + buttonWidth + buttonSpacing + buttonWidth / 2, buttonAreaY + 20);
+            
+            // 리셋 버튼
+            pipContext.fillStyle = '#333';
+            pipContext.fillRect(startX + (buttonWidth + buttonSpacing) * 2, buttonAreaY, buttonWidth, buttonHeight);
+            pipContext.fillStyle = 'white';
+            pipContext.fillText('리셋', startX + (buttonWidth + buttonSpacing) * 2 + buttonWidth / 2, buttonAreaY + 20);
         }
         
         // 초기 그리기
@@ -356,6 +882,9 @@ async function startPIP() {
         // PIP 모드 시작 (재생 후)
         await pipVideo.requestPictureInPicture();
         
+        // PIP 비디오 요소에 클릭 이벤트 처리 (PIP 창에서 클릭 가능하도록)
+        pipVideo.addEventListener('click', handlePIPVideoClick);
+        
         // 타이머와 동기화하여 Canvas를 주기적으로 업데이트 (100ms마다 - 타이머 업데이트와 동일한 주기)
         pipUpdateInterval = setInterval(() => {
             if (document.pictureInPictureElement && pipContext) {
@@ -377,42 +906,15 @@ async function startPIP() {
     }
 }
 
-// PIP 모드 종료
-function stopPIP() {
-    if (pipAnimationFrame) {
-        cancelAnimationFrame(pipAnimationFrame);
-        pipAnimationFrame = null;
-    }
-    
-    if (pipUpdateInterval) {
-        clearInterval(pipUpdateInterval);
-        pipUpdateInterval = null;
-    }
-    
-    if (pipVideo.srcObject) {
-        pipVideo.srcObject.getTracks().forEach(track => track.stop());
-        pipVideo.srcObject = null;
-    }
-    
-    if (document.pictureInPictureElement) {
-        document.exitPictureInPicture();
-    }
-    
-    pipBtn.textContent = 'PIP 모드';
-    pipBtn.classList.remove('pip-active');
-}
+// 사용하지 않는 함수 제거됨
+*/
 
 // PIP 버튼 클릭 이벤트
 pipBtn.addEventListener('click', async () => {
-    if (document.pictureInPictureElement) {
-        stopPIP();
+    if (pipWindow && !pipWindow.closed) {
+        stopFloatingRemote();
     } else {
-        // PIP API 지원 확인
-        if (!document.pictureInPictureEnabled || !pipVideo.requestPictureInPicture) {
-            console.log('PIP 모드를 지원하지 않는 브라우저입니다.');
-            return;
-        }
-        await startPIP();
+        await startFloatingRemote();
     }
 });
 
@@ -501,12 +1003,14 @@ function generateGradientColors(baseColor) {
     return { start: startColor, end: endColor };
 }
 
-// 색상 업데이트 함수
+// 색상 업데이트 함수 (고정 색상 사용)
 function updateColors() {
+    const timerDisplayContainer = timerDisplay?.closest('.timer-display');
     if (timerDisplayContainer) {
-        const normalGradient = generateGradientColors(normalColor.value);
-        const warningGradient = generateGradientColors(warningColor.value);
+        const normalGradient = generateGradientColors(NORMAL_COLOR);
+        const warningGradient = generateGradientColors(WARNING_COLOR);
         
+        // 고정 색상 적용
         timerDisplayContainer.style.setProperty('--normal-color-start', normalGradient.start);
         timerDisplayContainer.style.setProperty('--normal-color-end', normalGradient.end);
         timerDisplayContainer.style.setProperty('--warning-color-start', warningGradient.start);
@@ -518,16 +1022,13 @@ function updateColors() {
 function saveToLocalStorage() {
     localStorage.setItem('timer-time', timerInput.value);
     localStorage.setItem('timer-warning-time', warningInput.value);
-    localStorage.setItem('timer-normal-color', normalColor.value);
-    localStorage.setItem('timer-warning-color', warningColor.value);
 }
 
 // 로컬스토리지에서 불러오기 함수
 function loadFromLocalStorage() {
     const savedTime = localStorage.getItem('timer-time');
     const savedWarningTime = localStorage.getItem('timer-warning-time');
-    const savedNormalColor = localStorage.getItem('timer-normal-color');
-    const savedWarningColor = localStorage.getItem('timer-warning-color');
+    const savedVolume = localStorage.getItem('timer-volume');
     
     if (savedTime) {
         timerInput.value = savedTime;
@@ -537,25 +1038,104 @@ function loadFromLocalStorage() {
         warningInput.value = savedWarningTime;
     }
     
-    if (savedNormalColor) {
-        normalColor.value = savedNormalColor;
-    }
-    
-    if (savedWarningColor) {
-        warningColor.value = savedWarningColor;
+    if (savedVolume) {
+        const volume = parseFloat(savedVolume);
+        volumeLevel = volume / 100;
+        const volumeSliderEl = document.getElementById('volume-slider');
+        if (volumeSliderEl) {
+            volumeSliderEl.value = volume;
+        }
+        const volumeValue = document.getElementById('volume-value');
+        if (volumeValue) {
+            volumeValue.textContent = Math.round(volume) + '%';
+        }
     }
 }
 
-// 값 변경 시 로컬스토리지에 저장
-timerInput.addEventListener('input', saveToLocalStorage);
-warningInput.addEventListener('input', saveToLocalStorage);
-normalColor.addEventListener('input', () => {
-    updateColors();
+// 시간 입력 시 타이머에 바로 적용
+timerInput.addEventListener('input', (e) => {
     saveToLocalStorage();
+    
+    // 재생 중이 아니면 타이머에 바로 반영
+    if (!isRunning) {
+        const inputValue = parseFloat(e.target.value);
+        if (!isNaN(inputValue) && inputValue >= 0) {
+            currentTime = inputValue;
+            initialTime = inputValue;
+            timerDisplay.textContent = formatTime(currentTime);
+            
+            // 경고 상태 업데이트
+            const warningThreshold = parseFloat(warningInput.value) || 0;
+            if (currentTime <= warningThreshold && currentTime > 0) {
+                isWarning = true;
+                warningStartTime = Date.now();
+                lastBeepTime = 0;
+                if (timerDisplay) {
+                    timerDisplay.classList.add('warning');
+                }
+            } else {
+                isWarning = false;
+                warningStartTime = null;
+                lastBeepTime = 0;
+                if (timerDisplay) {
+                    timerDisplay.classList.remove('warning');
+                }
+            }
+            
+            // PIP 창이 열려있으면 동기화
+            if (pipWindow && !pipWindow.closed) {
+                const pipTimerDisplayEl = pipWindow.document.getElementById('timer-display');
+                if (pipTimerDisplayEl) {
+                    pipTimerDisplayEl.textContent = formatTime(currentTime);
+                }
+                const pipTimerDisplayContainer = pipWindow.document.querySelector('.timer-display');
+                if (pipTimerDisplayContainer) {
+                    if (isWarning) {
+                        pipTimerDisplayContainer.classList.add('warning');
+                    } else {
+                        pipTimerDisplayContainer.classList.remove('warning');
+                    }
+                }
+            }
+        }
+    }
 });
-warningColor.addEventListener('input', () => {
-    updateColors();
+
+// 경고 시간 입력 시 로컬스토리지에 저장
+warningInput.addEventListener('input', (e) => {
     saveToLocalStorage();
+    
+    // 재생 중이 아니면 경고 상태 업데이트
+    if (!isRunning) {
+        const warningThreshold = parseFloat(e.target.value) || 0;
+        if (currentTime <= warningThreshold && currentTime > 0) {
+            isWarning = true;
+            warningStartTime = Date.now();
+            lastBeepTime = 0;
+            if (timerDisplay) {
+                timerDisplay.classList.add('warning');
+            }
+        } else {
+            isWarning = false;
+            warningStartTime = null;
+            lastBeepTime = 0;
+            if (timerDisplay) {
+                timerDisplay.classList.remove('warning');
+            }
+        }
+        
+        // PIP 창이 열려있으면 동기화
+        if (pipWindow && !pipWindow.closed) {
+            const pipTimerDisplayContainer = pipWindow.document.querySelector('.timer-display');
+            if (pipTimerDisplayContainer) {
+                if (isWarning) {
+                    pipTimerDisplayContainer.classList.add('warning');
+                } else {
+                    pipTimerDisplayContainer.classList.remove('warning');
+                }
+            }
+        }
+    }
 });
 
 // 로컬스토리지에서 불러오기
@@ -564,5 +1144,23 @@ loadFromLocalStorage();
 // 초기 색상 설정
 updateColors();
 
-// 초기화
-timerDisplay.textContent = formatTime(0);
+// 초기화 - 입력된 시간이 있으면 표시
+const initialInputValue = parseFloat(timerInput.value);
+if (!isNaN(initialInputValue) && initialInputValue >= 0) {
+    currentTime = initialInputValue;
+    initialTime = initialInputValue;
+    timerDisplay.textContent = formatTime(currentTime);
+    
+    // 경고 상태 확인
+    const warningThreshold = parseFloat(warningInput.value) || 0;
+    if (currentTime <= warningThreshold && currentTime > 0) {
+        isWarning = true;
+        warningStartTime = Date.now();
+        lastBeepTime = 0;
+        if (timerDisplay) {
+            timerDisplay.classList.add('warning');
+        }
+    }
+} else {
+    timerDisplay.textContent = formatTime(0);
+}
