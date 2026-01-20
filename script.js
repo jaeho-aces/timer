@@ -26,10 +26,42 @@ let pipContext = null;
 let pipAnimationFrame = null;
 let pipUpdateInterval = null;
 let warningStartTime = null; // 경고 시작 시점 (CSS 애니메이션 동기화용)
+let audioContext = null; // 오디오 컨텍스트
+let lastBeepTime = 0; // 마지막 비프음 재생 시점
 
 // 시간을 초 단위로만 표시
 function formatTime(seconds) {
     return seconds.toFixed(1);
+}
+
+// 비프음 재생 함수
+function playBeep() {
+    try {
+        // AudioContext 초기화 (사용자 인터랙션 후에만 가능)
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        // 비프음 설정
+        oscillator.frequency.value = 800; // 800Hz 주파수
+        oscillator.type = 'sine'; // 사인파
+        
+        // 볼륨 설정 (0.3 = 30%)
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+        
+        // 0.1초 동안 재생
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.1);
+    } catch (error) {
+        console.log('비프음 재생 오류:', error);
+    }
 }
 
 // 타이머 업데이트
@@ -59,14 +91,28 @@ function updateTimer() {
         if (currentTime <= warningThreshold && !isWarning) {
             isWarning = true;
             warningStartTime = Date.now(); // 경고 시작 시점 기록 (CSS 애니메이션 동기화)
+            lastBeepTime = 0; // 비프음 재생 시점 초기화
             if (timerDisplayContainer) {
                 timerDisplayContainer.classList.add('warning');
             }
+            // 경고 시작 시 즉시 비프음 재생
+            playBeep();
         } else if (currentTime > warningThreshold && isWarning) {
             isWarning = false;
             warningStartTime = null;
+            lastBeepTime = 0;
             if (timerDisplayContainer) {
                 timerDisplayContainer.classList.remove('warning');
+            }
+        } else if (isWarning && warningStartTime !== null) {
+            // 경고 중일 때 깜박임과 동기화하여 비프음 재생 (0.5초 주기)
+            const elapsed = Date.now() - warningStartTime;
+            const cycleTime = elapsed % 500; // 0.5초 주기
+            
+            // 0-100ms 구간에서만 비프음 재생 (깜박임과 동기화, 각 주기마다 한 번만)
+            if (cycleTime < 100 && elapsed - lastBeepTime >= 400) {
+                playBeep();
+                lastBeepTime = elapsed;
             }
         }
     }
@@ -121,6 +167,7 @@ function stopTimer() {
     if (currentTime > 0 && currentTime <= warningThreshold) {
         if (!isWarning) {
             warningStartTime = Date.now(); // 경고 시작 시점 기록
+            lastBeepTime = 0;
         }
         isWarning = true;
         if (timerDisplayContainer) {
@@ -129,6 +176,7 @@ function stopTimer() {
     } else {
         isWarning = false;
         warningStartTime = null;
+        lastBeepTime = 0;
         if (timerDisplayContainer) {
             timerDisplayContainer.classList.remove('warning');
         }
@@ -145,6 +193,7 @@ function resetTimer() {
     warningInput.disabled = false;
     isWarning = false;
     warningStartTime = null;
+    lastBeepTime = 0;
     if (timerDisplayContainer) {
         timerDisplayContainer.classList.remove('warning');
     }
