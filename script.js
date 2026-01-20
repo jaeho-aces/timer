@@ -11,6 +11,7 @@ const timerDisplayContainer = timerDisplay.closest('.timer-display');
 const startBtn = document.getElementById('start-btn');
 const stopBtn = document.getElementById('stop-btn');
 const resetBtn = document.getElementById('reset-btn');
+const resetSettingsBtn = document.getElementById('reset-settings-btn');
 const pipBtn = document.getElementById('pip-btn');
 const pipVideo = document.getElementById('pip-video');
 const pipCanvas = document.getElementById('pip-canvas');
@@ -134,13 +135,12 @@ function stopTimer() {
     }
 }
 
-// 타이머 리셋
+// 타이머 리셋 (타이머만 초기화)
 function resetTimer() {
     stopTimer();
     currentTime = 0;
     initialTime = 0;
     timerDisplay.textContent = formatTime(0);
-    timerInput.value = '10.0';
     timerInput.disabled = false;
     warningInput.disabled = false;
     isWarning = false;
@@ -150,10 +150,32 @@ function resetTimer() {
     }
 }
 
+// 설정 초기화 (시간, 경고 시간, 색상 초기화)
+function resetSettings() {
+    // 기본값으로 설정
+    timerInput.value = '10.0';
+    warningInput.value = '3.0';
+    normalColor.value = '#667eea';
+    warningColor.value = '#ff6b6b';
+    
+    // 색상 업데이트
+    updateColors();
+    
+    // 로컬스토리지에서 삭제
+    localStorage.removeItem('timer-time');
+    localStorage.removeItem('timer-warning-time');
+    localStorage.removeItem('timer-normal-color');
+    localStorage.removeItem('timer-warning-color');
+    
+    // 타이머도 초기화
+    resetTimer();
+}
+
 // 이벤트 리스너
 startBtn.addEventListener('click', startTimer);
 stopBtn.addEventListener('click', stopTimer);
 resetBtn.addEventListener('click', resetTimer);
+resetSettingsBtn.addEventListener('click', resetSettings);
 
 // Enter 키로 시작
 timerInput.addEventListener('keypress', (e) => {
@@ -443,9 +465,52 @@ function updateColors() {
     }
 }
 
-// 색상 변경 이벤트 리스너
-normalColor.addEventListener('input', updateColors);
-warningColor.addEventListener('input', updateColors);
+// 로컬스토리지 저장 함수
+function saveToLocalStorage() {
+    localStorage.setItem('timer-time', timerInput.value);
+    localStorage.setItem('timer-warning-time', warningInput.value);
+    localStorage.setItem('timer-normal-color', normalColor.value);
+    localStorage.setItem('timer-warning-color', warningColor.value);
+}
+
+// 로컬스토리지에서 불러오기 함수
+function loadFromLocalStorage() {
+    const savedTime = localStorage.getItem('timer-time');
+    const savedWarningTime = localStorage.getItem('timer-warning-time');
+    const savedNormalColor = localStorage.getItem('timer-normal-color');
+    const savedWarningColor = localStorage.getItem('timer-warning-color');
+    
+    if (savedTime) {
+        timerInput.value = savedTime;
+    }
+    
+    if (savedWarningTime) {
+        warningInput.value = savedWarningTime;
+    }
+    
+    if (savedNormalColor) {
+        normalColor.value = savedNormalColor;
+    }
+    
+    if (savedWarningColor) {
+        warningColor.value = savedWarningColor;
+    }
+}
+
+// 값 변경 시 로컬스토리지에 저장
+timerInput.addEventListener('input', saveToLocalStorage);
+warningInput.addEventListener('input', saveToLocalStorage);
+normalColor.addEventListener('input', () => {
+    updateColors();
+    saveToLocalStorage();
+});
+warningColor.addEventListener('input', () => {
+    updateColors();
+    saveToLocalStorage();
+});
+
+// 로컬스토리지에서 불러오기
+loadFromLocalStorage();
 
 // 초기 색상 설정
 updateColors();
