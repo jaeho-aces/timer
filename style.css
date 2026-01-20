@@ -73,14 +73,14 @@ html, body {
     flex-direction: column;
     gap: 20px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    width: 100%;
-    max-width: 600px;
+    width: fit-content;
+    min-width: 200px;
     margin: 0 auto;
 }
 
 .time-inputs-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 16px;
 }
 
@@ -88,6 +88,7 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    align-items: center;
 }
 
 .time-input-group label {
@@ -98,13 +99,14 @@ html, body {
 
 .time-input-group input[type="number"] {
     width: 100%;
-    padding: 12px 16px;
-    font-size: 1rem;
+    padding: 8px 12px;
+    font-size: 0.9rem;
     border: 1px solid var(--cd-bord-2);
     border-radius: 8px;
     background: var(--cd-back-3);
     color: white;
     transition: all 0.3s;
+    max-width: 200px;
 }
 
 .time-input-group input[type="number"]:hover:not(:disabled) {
@@ -159,7 +161,7 @@ html, body {
 .action-buttons {
     display: flex;
     gap: 12px;
-    justify-content: flex-end;
+    justify-content: center;
     margin-top: 4px;
 }
 
@@ -442,7 +444,7 @@ html, body {
     background: #3b82f6;
     cursor: pointer;
     transition: all 0.2s;
-    margin-left: -5px; /* (14px - 4px) / 2 = 5px로 중앙 정렬 */
+    margin-left: -6px; /* (14px - 4px) / 2 = 5px로 중앙 정렬 */
 }
 
 .volume-slider::-webkit-slider-thumb:hover {
@@ -537,9 +539,7 @@ html, body {
 
 /* 반응형 */
 @media (max-width: 640px) {
-    .time-inputs-row {
-        grid-template-columns: 1fr;
-    }
+    /* time-inputs-row는 이미 flex column으로 세로 배치됨 */
     
     .color-picker-section {
         grid-template-columns: 1fr;

@@ -70,27 +70,40 @@ function playBeep() {
 
 // 음량 슬라이더 토글 함수
 function toggleVolumeSlider(isPipWindow = false) {
-    const targetWindow = isPipWindow ? pipWindow : window;
-    const targetDocument = isPipWindow ? pipWindow.document : document;
-    
-    if (!targetWindow || !targetDocument) return;
-    
-    const volumeSliderContainer = targetDocument.getElementById('volume-slider-container');
-    if (volumeSliderContainer) {
-        const isVisible = volumeSliderContainer.style.display !== 'none';
-        volumeSliderContainer.style.display = isVisible ? 'none' : 'block';
-        
-        // 슬라이더가 표시되면 외부 클릭 리스너 추가
-        if (!isVisible) {
-            // 다음 이벤트 루프에서 리스너 추가 (현재 클릭 이벤트가 전파되지 않도록)
-            setTimeout(() => {
-                const clickHandler = (event) => {
-                    handleOutsideClick(event, isPipWindow);
-                };
-                targetDocument.addEventListener('click', clickHandler, true);
-            }, 0);
-        } else {
-            // 모든 외부 클릭 리스너 제거는 handleOutsideClick에서 처리
+    // 메인 페이지와 PIP 모드 각각 독립적으로 처리
+    if (isPipWindow) {
+        // PIP 모드
+        if (!pipWindow || pipWindow.closed) return;
+        const pipDocument = pipWindow.document;
+        const pipVolumeSliderContainer = pipDocument.getElementById('volume-slider-container');
+        if (pipVolumeSliderContainer) {
+            const isVisible = pipVolumeSliderContainer.style.display !== 'none';
+            pipVolumeSliderContainer.style.display = isVisible ? 'none' : 'block';
+            
+            if (!isVisible) {
+                setTimeout(() => {
+                    const clickHandler = (event) => {
+                        handleOutsideClick(event, true);
+                    };
+                    pipDocument.addEventListener('click', clickHandler, true);
+                }, 0);
+            }
+        }
+    } else {
+        // 메인 페이지
+        const volumeSliderContainer = document.getElementById('volume-slider-container');
+        if (volumeSliderContainer) {
+            const isVisible = volumeSliderContainer.style.display !== 'none';
+            volumeSliderContainer.style.display = isVisible ? 'none' : 'block';
+            
+            if (!isVisible) {
+                setTimeout(() => {
+                    const clickHandler = (event) => {
+                        handleOutsideClick(event, false);
+                    };
+                    document.addEventListener('click', clickHandler, true);
+                }, 0);
+            }
         }
     }
 }
@@ -329,7 +342,7 @@ function resetTimer() {
 // 설정 초기화 (시간, 경고 시간 초기화)
 function resetSettings() {
     // 기본값으로 설정
-    timerInput.value = '10.0';
+    timerInput.value = '31.4';
     warningInput.value = '3.0';
     
     // 색상 업데이트 (고정 색상)
