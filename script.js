@@ -29,6 +29,7 @@ let pipWindow = null; // PIP 창
 let warningStartTime = null; // 경고 시작 시점 (CSS 애니메이션 동기화용)
 let audioContext = null; // 오디오 컨텍스트
 let lastBeepTime = 0; // 마지막 비프음 재생 시점
+let lastBeepCycle = -1; // 마지막 비프음 주기 번호 (500ms 단위)
 let volumeLevel = 0.3; // 음량 레벨 (0~1, 기본값 0.3 = 30%)
 let hasPlayedAlarm = false; // 띠링 알림음 재생 여부 (한 번만 재생하기 위한 플래그)
 
@@ -246,6 +247,7 @@ function updateTimer() {
             isWarning = true;
             warningStartTime = Date.now(); // 경고 시작 시점 기록 (비프음 동기화용)
             lastBeepTime = Date.now(); // 비프음 재생 시점 초기화 (절대 시간)
+            lastBeepCycle = 0; // 첫 번째 주기 (0ms 시점)
             if (timerDisplay) {
                 timerDisplay.classList.add('warning');
             }
@@ -255,17 +257,21 @@ function updateTimer() {
             isWarning = false;
             warningStartTime = null;
             lastBeepTime = 0;
+            lastBeepCycle = -1;
             if (timerDisplay) {
                 timerDisplay.classList.remove('warning');
             }
         } else if (isWarning && warningStartTime !== null) {
             // 경고 중일 때 0.5초마다 정확히 비프음 재생
+            // warningStartTime을 기준으로 500ms 주기로 재생
             const now = Date.now();
-            const timeSinceLastBeep = now - lastBeepTime;
+            const elapsed = now - warningStartTime; // 경고 시작 후 경과 시간 (ms)
+            const currentCycle = Math.floor(elapsed / 500); // 현재 주기 번호
             
-            // 0.5초(500ms)마다 비프음 재생
-            if (timeSinceLastBeep >= 500) {
+            // 새로운 주기(500ms)에 도달했으면 비프음 재생
+            if (currentCycle > lastBeepCycle) {
                 playBeep();
+                lastBeepCycle = currentCycle;
                 lastBeepTime = now;
             }
         }
@@ -324,6 +330,7 @@ function stopTimer() {
         if (!isWarning) {
             warningStartTime = Date.now(); // 경고 시작 시점 기록
             lastBeepTime = Date.now(); // 비프음 재생 시점 초기화 (절대 시간)
+            lastBeepCycle = 0; // 첫 번째 주기
         }
         isWarning = true;
         if (timerDisplay) {
@@ -333,6 +340,7 @@ function stopTimer() {
         isWarning = false;
         warningStartTime = null;
         lastBeepTime = 0;
+        lastBeepCycle = -1;
         if (timerDisplay) {
             timerDisplay.classList.remove('warning');
         }
@@ -365,6 +373,7 @@ function resetTimer() {
     isWarning = false;
     warningStartTime = null;
     lastBeepTime = 0;
+    lastBeepCycle = -1;
     hasPlayedAlarm = false; // 리셋 시 알림음 플래그도 초기화
     if (timerDisplay) {
         timerDisplay.classList.remove('warning');
