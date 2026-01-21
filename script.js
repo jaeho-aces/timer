@@ -30,6 +30,7 @@ let warningStartTime = null; // 경고 시작 시점 (CSS 애니메이션 동기
 let audioContext = null; // 오디오 컨텍스트
 let lastBeepTime = 0; // 마지막 비프음 재생 시점
 let volumeLevel = 0.3; // 음량 레벨 (0~1, 기본값 0.3 = 30%)
+let hasPlayedAlarm = false; // 띠링 알림음 재생 여부 (한 번만 재생하기 위한 플래그)
 
 // 시간을 초 단위로만 표시
 function formatTime(seconds) {
@@ -65,6 +66,56 @@ function playBeep() {
         oscillator.stop(audioContext.currentTime + 0.1);
     } catch (error) {
         console.log('비프음 재생 오류:', error);
+    }
+}
+
+// 띠링 알림음 재생 함수 (시간 종료 시)
+function playAlarm() {
+    if (volumeLevel <= 0) return; // 음량이 0이면 재생하지 않음
+    
+    try {
+        // AudioContext 초기화 (사용자 인터랙션 후에만 가능)
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        const currentTime = audioContext.currentTime;
+        
+        // 첫 번째 음 (높은 음)
+        const oscillator1 = audioContext.createOscillator();
+        const gainNode1 = audioContext.createGain();
+        oscillator1.connect(gainNode1);
+        gainNode1.connect(audioContext.destination);
+        
+        oscillator1.frequency.value = 1000; // 1000Hz
+        oscillator1.type = 'sine';
+        
+        gainNode1.gain.setValueAtTime(0, currentTime);
+        gainNode1.gain.linearRampToValueAtTime(volumeLevel, currentTime + 0.05);
+        gainNode1.gain.setValueAtTime(volumeLevel, currentTime + 0.3);
+        gainNode1.gain.linearRampToValueAtTime(0, currentTime + 0.35);
+        
+        oscillator1.start(currentTime);
+        oscillator1.stop(currentTime + 0.35);
+        
+        // 두 번째 음 (더 높은 음)
+        const oscillator2 = audioContext.createOscillator();
+        const gainNode2 = audioContext.createGain();
+        oscillator2.connect(gainNode2);
+        gainNode2.connect(audioContext.destination);
+        
+        oscillator2.frequency.value = 1500; // 1500Hz
+        oscillator2.type = 'sine';
+        
+        gainNode2.gain.setValueAtTime(0, currentTime + 0.3);
+        gainNode2.gain.linearRampToValueAtTime(volumeLevel, currentTime + 0.35);
+        gainNode2.gain.setValueAtTime(volumeLevel, currentTime + 0.6);
+        gainNode2.gain.linearRampToValueAtTime(0, currentTime + 0.65);
+        
+        oscillator2.start(currentTime + 0.3);
+        oscillator2.stop(currentTime + 0.65);
+    } catch (error) {
+        console.log('띠링 알림음 재생 오류:', error);
     }
 }
 
@@ -169,11 +220,18 @@ function updateTimer() {
         currentTime = 0;
         timerDisplay.textContent = formatTime(0);
         
+        // 시간이 끝나면 띠링 알림음 재생 (한 번만)
+        if (!hasPlayedAlarm) {
+            playAlarm();
+            hasPlayedAlarm = true;
+        }
+        
         // 0초가 되면 지정한 시간으로 반복
         if (isRunning) {
             currentTime = initialTime;
             isWarning = false;
             warningStartTime = null;
+            hasPlayedAlarm = false; // 리셋할 때 알림음 플래그도 초기화
             if (timerDisplay) {
                 timerDisplay.classList.remove('warning');
             }
@@ -187,7 +245,7 @@ function updateTimer() {
         if (currentTime <= warningThreshold && !isWarning) {
             isWarning = true;
             warningStartTime = Date.now(); // 경고 시작 시점 기록 (비프음 동기화용)
-            lastBeepTime = 0; // 비프음 재생 시점 초기화
+            lastBeepTime = Date.now(); // 비프음 재생 시점 초기화 (절대 시간)
             if (timerDisplay) {
                 timerDisplay.classList.add('warning');
             }
@@ -201,14 +259,14 @@ function updateTimer() {
                 timerDisplay.classList.remove('warning');
             }
         } else if (isWarning && warningStartTime !== null) {
-            // 경고 중일 때 깜박임과 동기화하여 비프음 재생 (0.5초 주기)
-            const elapsed = Date.now() - warningStartTime;
-            const cycleTime = elapsed % 500; // 0.5초 주기
+            // 경고 중일 때 0.5초마다 정확히 비프음 재생
+            const now = Date.now();
+            const timeSinceLastBeep = now - lastBeepTime;
             
-            // 0-100ms 구간에서만 비프음 재생 (깜박임과 동기화, 각 주기마다 한 번만)
-            if (cycleTime < 100 && elapsed - lastBeepTime >= 400) {
+            // 0.5초(500ms)마다 비프음 재생
+            if (timeSinceLastBeep >= 500) {
                 playBeep();
-                lastBeepTime = elapsed;
+                lastBeepTime = now;
             }
         }
     }
@@ -234,6 +292,7 @@ function startTimer() {
     if (currentTime === 0) {
         currentTime = inputValue;
         initialTime = inputValue;
+        hasPlayedAlarm = false; // 새로운 타이머 시작 시 알림음 플래그 초기화
     }
     
     isRunning = true;
@@ -264,7 +323,7 @@ function stopTimer() {
     if (currentTime > 0 && currentTime <= warningThreshold) {
         if (!isWarning) {
             warningStartTime = Date.now(); // 경고 시작 시점 기록
-            lastBeepTime = 0;
+            lastBeepTime = Date.now(); // 비프음 재생 시점 초기화 (절대 시간)
         }
         isWarning = true;
         if (timerDisplay) {
@@ -306,6 +365,7 @@ function resetTimer() {
     isWarning = false;
     warningStartTime = null;
     lastBeepTime = 0;
+    hasPlayedAlarm = false; // 리셋 시 알림음 플래그도 초기화
     if (timerDisplay) {
         timerDisplay.classList.remove('warning');
     }
